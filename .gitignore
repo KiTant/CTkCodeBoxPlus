@@ -1,0 +1,7 @@
+venv/
+*.pyc
+__pycache__/
+CTkCodeBoxPlus/__pycache__/
+.pytest_cache/
+.idea/
+test*.py

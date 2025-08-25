@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "CTkCodeBoxPlus"
+version = "1.0"
+description = "A code editor widget for customtkinter with enhanced features"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "xzyqox", email = "xzyqox@gmail.com"}
+]
+maintainers = [
+    {name = "xzyqox", email = "xzyqox@gmail.com"}
+]
+keywords = [
+    "customtkinter",
+    "codebox",
+    "code",
+    "gui",
+    "tkinter",
+    "context-menu",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: User Interfaces"
+]
+requires-python = ">=3.8"
+dependencies = [
+    "customtkinter>=5.0.0",
+    "pygments>=2.19.2",
+    "pyperclip>=1.9.0",
+    "tklinenums>=1.7.1"
+]
+
+[project.urls]
+Homepage = "https://github.com/KiTant/CTkCodeBoxPlus"
+Repository = "https://github.com/KiTant/CTkCodeBoxPlus"
+Issues = "https://github.com/KiTant/CTkCodeBoxPlus/issues"
+Documentation = "https://github.com/KiTant/CTkCodeBoxPlus#readme"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black",
+    "flake8"
+]
+
+[tool.setuptools.packages.find]
+include = ["CTkCodeBoxPlus*"]
+
+[tool.setuptools.package-data]
+CTkCodeBoxPlus = ["*.py"]
