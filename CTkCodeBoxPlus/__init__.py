@@ -6,7 +6,7 @@ License: MIT
 Homepage: https://github.com/KiTant/CTkCodeBoxPlus
 """
 
-__version__ = '1.0'
+__version__ = '1.1'
 
 from .ctk_code_box import CTkCodeBox
 from .text_menu import TextMenu

@@ -1,6 +1,8 @@
 import customtkinter
 from CTkCodeBoxPlus import *
 
+customtkinter.set_appearance_mode("Dark")
+
 root = customtkinter.CTk()
 root.geometry("800x500")
 

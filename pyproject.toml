@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "CTkCodeBoxPlus"
-version = "1.0"
+version = "1.1"
 description = "A code editor widget for customtkinter with enhanced features"
 readme = "README.md"
 license = {file = "LICENSE"}

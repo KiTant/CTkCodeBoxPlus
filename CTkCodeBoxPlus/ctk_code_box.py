@@ -14,8 +14,9 @@ from pygments.lexers import (python, javascript, c_cpp, dotnet, html,
                              scripting, perl, objective, jsx)
 from pygments.styles import get_style_by_name, get_all_styles
 from .keybinding import _register_keybind
-from typing import Union
+from typing import Union, Optional
 import pyperclip
+from dataclasses import dataclass
 
 
 # Custom Exception Classes
@@ -39,6 +40,30 @@ class LexerError(CTkCodeBoxError):
     pass
 
 
+@dataclass(frozen=True)
+class MenuSettings:
+    enabled: bool = True
+    fg_color: Optional[str] = None
+    text_color: Optional[str] = None
+    hover_color: Optional[str] = None
+
+
+@dataclass()
+class HistorySettings:
+    enabled: bool = True
+    cooldown: int = 1500  #ms
+    max: int = 100
+
+
+@dataclass(frozen=True)
+class NumberingSettings:
+    enabled: bool = True
+    color: Optional[str] = None
+    justify: str = "left"
+    padx: int = 30
+    auto_padx: bool = True
+
+
 class CTkCodeBox(customtkinter.CTkTextbox):
     """A code-oriented CTk textbox with syntax highlighting and UX helpers.
 
@@ -58,20 +83,14 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                  language: Union[str, lexer.Lexer],
                  height: int = 200,
                  theme: str = "solarized-light",
-                 line_numbering: bool = True,
-                 numbering_color: str = None,
-                 menu: bool = True,
-                 menu_fg_color: str = None,
-                 menu_text_color: str = None,
-                 menu_hover_color: str = None,
+                 numbering_settings: NumberingSettings = NumberingSettings(),
+                 menu_settings: MenuSettings = MenuSettings(),
                  wrap: bool = True,
                  select_color: str = None,
                  cursor_color: str = None,
                  highlight_current_line: bool = True,
                  highlight_current_line_color: str = None,
-                 history_enabled: bool = True,
-                 history_cooldown: int = 2500,
-                 history_max: int = 100,
+                 history_settings: HistorySettings = HistorySettings(),
                  indent_width: int = 4,
                  **kwargs):
         """Initialize a CTkCodeBox instance.
@@ -81,25 +100,19 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             language: Pygments language name (str) or a lexer class.
             height: Widget height in pixels (passed to CTkTextbox).
             theme: Pygments style name used for highlighting.
-            line_numbering: Enable line numbers.
-            numbering_color: Color for line numbers.
-            menu: Enable context menu.
-            menu_fg_color: Context menu background color.
-            menu_text_color: Context menu text color.
-            menu_hover_color: Context menu active background color.
+            numbering_settings: NumberingSettings object for the line nums.
+            menu_settings: MenuSettings object for the context menu.
             wrap: Enable word wrap.
             select_color: Override selection background color.
             cursor_color: Cursor color I (blinking).
             highlight_current_line: Highlight the active line.
             highlight_current_line_color: Explicit color for active line.
-            history_enabled: Enable built-in undo/redo history.
-            history_cooldown: Cooldown for pushing history in _on_keypress_history().
-            history_max: Maximum undo frames to keep.
+            history_settings: HistorySettings object for custom history.
             indent_width: Number of spaces for indent/outdent.
             **kwargs: Additional arguments passed to CTkTextbox.
         """
         # Do not enable Tk's built-in undo/history
-        if 'undo' in kwargs and history_enabled:
+        if 'undo' in kwargs and history_settings.enabled:
             try:
                 del kwargs['undo']
             except Exception:
@@ -109,8 +122,11 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         # Wrap management
         self.wrap_enabled = bool(wrap)
         self.set_wrap(self.wrap_enabled)
-        if line_numbering:
-            self.line_nums = AddLineNums(self, text_color=numbering_color)
+        if numbering_settings.enabled:
+            self.line_nums = AddLineNums(self, text_color=numbering_settings.color,
+                                         justify=numbering_settings.justify,
+                                         padx=numbering_settings.padx,
+                                         auto_padx=numbering_settings.auto_padx)
 
         self.select_color = select_color
         if select_color:
@@ -133,12 +149,10 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         _register_keybind(self, "CmdOrCtrl+Z", lambda: self.undo(), bind_scope='widget')
 
         # Custom history (undo/redo)
-        self._history_enabled = history_enabled
-        self._history_max = history_max
         self._undo_stack = []
         self._redo_stack = []
         self._history_typing_cooldown = None
-        self._history_cooldown = history_cooldown
+        self.history_settings = history_settings
 
         # Job id for debounced highlighting
         self._highlight_job = None
@@ -221,8 +235,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         self.bind("<Double-Button-1>", self._on_double_click, add=True)
         self.bind("<Triple-Button-1>", self._on_triple_click, add=True)
 
-        if menu:
-            self.text_menu = TextMenu(self, fg_color=menu_fg_color, text_color=menu_text_color, hover_color=menu_hover_color)
+        if menu_settings.enabled:
+            self.text_menu = TextMenu(self, fg_color=menu_settings.fg_color, text_color=menu_settings.text_color, hover_color=menu_settings.hover_color)
 
     def check_lexer(self):
         """Resolve and set the lexer.
@@ -320,15 +334,27 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             start_line = end_line
             start_index = end_index
 
-    def configure(self, param=None, **kwargs):
+    def configure(self, param=None, **kwargs):  #param here ONLY for tklinenums module
         """Extended configure with CTkCodeBox options.
-
-        Supports additional keyword options: theme, language, wrap, history_enabled
-        select_color, cursor_color, history_max, history_cooldown, highlight_current_line,
-        current_line_color, indent_width.
         Re-highlights when theme or language changes.
         Remaining options are passed to the base widget.
+        Args:
+            **kwargs: Configuration parameters (Supports additional keyword options: theme, language, wrap, history_enabled,
+                    select_color, cursor_color, history_max, history_cooldown, highlight_current_line,
+                    current_line_color, history_settings, numbering_padx, numbering_auto_padx, indent_width)
         """
+        one_action_handlers = {
+            "history_enabled": self.set_history_enabled,
+            "history_max": self.set_history_limit,
+            "history_cooldown": lambda val: setattr(self.history_settings, "cooldown", val),
+            "history_settings": lambda val: setattr(self, "history_settings", val),
+            "numbering_padx": lambda val: self.line_nums.set_padx(val),
+            "numbering_auto_padx": lambda val: setattr(self.line_nums, "auto_padx", val),
+            "indent_width": lambda val: setattr(self, "indent_width", val),
+        }
+        for param, value in list(kwargs.items()):
+            if param in one_action_handlers:
+                one_action_handlers[param](value)
         if "theme" in kwargs:
             self.theme_name = kwargs.pop("theme")
             self.configure_tags()
@@ -351,31 +377,48 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         if "cursor_color" in kwargs:
             self.cursor_color = kwargs.pop("cursor_color")
             self._textbox.config(insertbackground=self.cursor_color)
-        if "history_enabled" in kwargs:
-            self.set_history_enabled(kwargs.pop("history_enabled"))
-        if "history_max" in kwargs:
-            self.set_history_limit(kwargs.pop("history_max"))
-        if "history_cooldown" in kwargs:
-            self._history_cooldown = kwargs.pop("history_cooldown")
-        if "highlight_current_line" in kwargs or "current_line_color" in kwargs:
+        if "highlight_current_line" in kwargs or "current_line_color" in kwargs or "highlight_current_line_color" in kwargs:
             self._highlight_current_line = kwargs.pop("highlight_current_line", self._highlight_current_line)
-            self._current_line_color = kwargs.pop("current_line_color", self._current_line_color)
+            self._current_line_color = kwargs.pop("current_line_color", kwargs.pop("highlight_current_line_color", self._current_line_color))
             self.tag_config("current_line", background=self._get_current_line_color())
-        if "indent_width" in kwargs:
-            self.indent_width = kwargs.pop("indent_width")
 
         # Re-apply highlighting if theme or language changed
         self._schedule_highlight(0)
-        super().configure(**kwargs)
+        if kwargs:
+            super().configure(**kwargs)
 
     def cget(self, param):
-        """Query CTkCodeBox options in addition to base options."""
-        if param == "theme":
-            return self.theme_name
-        elif getattr(self, param, None):
-            return getattr(self, param)
-        elif getattr(self, "_"+param, None):
-            return getattr(self, "_"+param)
+        """Get configuration parameter value with support for custom parameters.
+        Args:
+            param: Parameter name to retrieve
+        Returns:
+            Parameter value
+        """
+        custom_params = {
+            "theme": lambda: self.theme_name,
+            "wrap_enabled": lambda: self.wrap_enabled,
+            "edited": self.is_edited,
+            "undo_stack": lambda: self._undo_stack,
+            "redo_stack": lambda: self._redo_stack,
+            "history_cd_active": lambda: True if self._history_typing_cooldown else False,
+            "all_themes": lambda: self.all_themes,
+            "common_langs": lambda: self.common_langs,
+            "text_menu": lambda: self.text_menu,
+            "line_nums": lambda: self.line_nums,
+            "history_enabled": lambda: self.history_settings.enabled,
+            "history_max": lambda: self.history_settings.max,
+            "history_cooldown": lambda: self.history_settings.cooldown,
+            "history_settings": lambda: self.history_settings,
+            "numbering_auto_padx": lambda: self.line_nums.auto_padx,
+            "language": lambda: self.language,
+            "select_color": lambda: self.select_color,
+            "cursor_color": lambda: self.cursor_color,
+            "highlight_current_line": lambda: self._highlight_current_line,
+            "current_line_color": lambda: self._current_line_color,
+            "highlight_current_line_color": lambda: self._current_line_color,
+        }
+        if param in custom_params:
+            return custom_params[param]()
         return super().cget(param)
 
     # General helpers
@@ -660,16 +703,16 @@ class CTkCodeBox(customtkinter.CTkTextbox):
     # History API
     def set_history_enabled(self, enabled: bool):
         """Enable/disable the internal undo/redo history."""
-        self._history_enabled = bool(enabled)
+        self.history_settings.enabled = bool(enabled)
         return "Success"
 
     def set_history_limit(self, limit: int):
         """Set maximum number of undo frames to keep."""
         try:
-            self._history_max = max(0, int(limit))
+            self.history_settings.max = max(0, int(limit))
             # Trim if needed
-            if self._history_max and len(self._undo_stack) > self._history_max:
-                self._undo_stack = self._undo_stack[-self._history_max:]
+            if self.history_settings.max and len(self._undo_stack) > self.history_settings.max:
+                self._undo_stack = self._undo_stack[-self.history_settings.max:]
             return "Success"
         except Exception:
             return None
@@ -683,7 +726,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
     def undo(self):
         """Undo the last change if history is enabled."""
 
-        if not self._history_enabled or not self._undo_stack:
+        if not self.history_settings.enabled or not self._undo_stack:
             return "Nothing to undo"
         try:
             current = self._save_state()
@@ -697,7 +740,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def redo(self):
         """Redo the last undone change if available."""
-        if not self._history_enabled or not self._redo_stack:
+        if not self.history_settings.enabled or not self._redo_stack:
             return "Nothing to redo"
         try:
             current = self._save_state()
@@ -754,14 +797,14 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def _history_push_current(self):
         """Push a snapshot of the current buffer state onto the undo stack."""
-        if not self._history_enabled:
+        if not self.history_settings.enabled:
             return
         try:
             state = self._save_state()
             self._undo_stack.append(state)
             # Limit size
-            if self._history_max and len(self._undo_stack) > self._history_max:
-                self._undo_stack = self._undo_stack[-self._history_max:]
+            if self.history_settings.max and len(self._undo_stack) > self.history_settings.max:
+                self._undo_stack = self._undo_stack[-self.history_settings.max:]
             # Clear redo on new action
             self._redo_stack.clear()
         except Exception:
@@ -769,7 +812,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def _on_keypress_history(self, event):
         """Typing into undo frames and snapshot when replacing selection."""
-        if not self._history_enabled:
+        if not self.history_settings.enabled:
             return
         try:
             ks = getattr(event, 'keysym', '')
@@ -784,7 +827,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                 return
             if self._history_typing_cooldown is None:
                 self._history_push_current()
-                self._history_typing_cooldown = self.after(self._history_cooldown, self._reset_history_cooldown)
+                self._history_typing_cooldown = self.after(self.history_settings.cooldown, self._reset_history_cooldown)
         except Exception:
             pass
 
@@ -880,6 +923,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def _on_backspace(self, event=None):
         """Smart-backspace: delete paired quotes/brackets if cursor is between them."""
+        self._history_push_current()
+        self._notify_content_changed()
         try:
             # If there is a selection, let default backspace handle it (history is handled elsewhere)
             if self.tag_ranges('sel'):
@@ -890,9 +935,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             pairs = {('(', ')'), ('[', ']'), ('{', '}'), ('<', '>')}
             if prev_ch and next_ch:
                 if (prev_ch, next_ch) in pairs or (prev_ch == next_ch and prev_ch in ('"', "'", '`')):
-                    self._history_push_current()
                     self.delete("insert -1c", "insert +1c")
-                    self._notify_content_changed()
                     return "break"
         except Exception:
             pass

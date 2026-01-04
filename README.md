@@ -39,28 +39,22 @@ root.mainloop()
 ```
 
 ### Arguments
-| Parameter                        | Type                     | Default           | Description                                            |
-|----------------------------------|--------------------------|-------------------|--------------------------------------------------------|
-| **master**                       | Widget                   | -                 | Parent widget                                          |
-| **language**                     | str/pygments.lexer.Lexer | -                 | Pygments language name (str) or a lexer class          |
-| **height**                       | int                      | 200               | Widget height in pixels (passed to CTkTextbox)         |
-| **theme**                        | str                      | "solarized-light" | Pygments style name used for highlighting              |
-| **line_numbering**               | bool                     | True              | Enable line numbers                                    |
-| **numbering_color**              | str                      | None              | Color for line numbers                                 |
-| **menu**                         | bool                     | True              | Enable context menu                                    |
-| **menu_fg_color**                | str                      | None              | Context menu background color                          |
-| **menu_text_color**              | str                      | None              | Context menu text color                                |
-| **menu_hover_color**             | str                      | None              | Context menu active background color                   |
-| **wrap**                         | bool                     | True              | Enable word wrap                                       |
-| **select_color**                 | str                      | None              | Override selection background color                    |
-| **cursor_color**                 | str                      | None              | Cursor color I (blinking)                              |
-| **highlight_current_line**       | bool                     | True              | Highlight the active line                              |
-| **highlight_current_line_color** | str                      | None              | Explicit color for active line                         |
-| **history_enabled**              | bool                     | True              | Enable built-in undo/redo history                      |
-| **history_cooldown** (ms)        | int                      | 2500              | Cooldown for pushing history in _on_keypress_history() |
-| **history_max**                  | int                      | 100               | Maximum undo frames to keep.                           |
-| **indent_width**                 | int                      | 4                 | Number of spaces for indent/outdent.                   |
-| ****kwargs**                     | various                  | -                 | Additional CTkTextBox parameters                       |
+| Parameter                         | Type                      | Default             | Description                                    |
+|-----------------------------------|---------------------------|---------------------|------------------------------------------------|
+| **master**                        | Widget                    | -                   | Parent widget                                  |
+| **language**                      | str/pygments.lexer.Lexer  | -                   | Pygments language name (str) or a lexer class  |
+| **height**                        | int                       | 200                 | Widget height in pixels (passed to CTkTextbox) |
+| **theme**                         | str                       | "solarized-light"   | Pygments style name used for highlighting      |
+| **numbering_settings**            | NumberingSettings         | NumberingSettings() | NumberingSettings object for the line nums     |
+| **menu_settings**                 | MenuSettings              | MenuSettings()      | MenuSettings object for the context menu       |
+| **wrap**                          | bool                      | True                | Enable word wrap                               |
+| **select_color**                  | str                       | None                | Override selection background color            |
+| **cursor_color**                  | str                       | None                | Cursor color I (blinking)                      |
+| **highlight_current_line**        | bool                      | True                | Highlight the active line                      |
+| **highlight_current_line_color**  | str                       | None                | Explicit color for active line                 |
+| **history_settings**              | HistorySettings           | HistorySettings()   | HistorySettings object for custom history.     |
+| **indent_width**                  | int                       | 4                   | Number of spaces for indent/outdent.           |
+| ****kwargs**                      | various                   | -                   | Additional CTkTextBox parameters               |
 
 ### Methods
 - **.insert(index, code, push_history)**: Insert code/text in the box and trigger a non-editing highlight update with pushing history (if push_history is True)
@@ -83,6 +77,30 @@ root.mainloop()
 - **.clear_history()**: Clear undo and redo stacks
 - **.undo()**: Undo the last change if history is enabled
 - **.redo()**: Redo the last undone change if available
+
+## Dataclasses
+```python
+@dataclass(frozen=True)
+class MenuSettings:
+    enabled: bool = True
+    fg_color: Optional[str] = None
+    text_color: Optional[str] = None
+    hover_color: Optional[str] = None
+
+@dataclass()
+class HistorySettings:
+    enabled: bool = True
+    cooldown: int = 1500  #ms
+    max: int = 100
+
+@dataclass(frozen=True)
+class NumberingSettings:
+    enabled: bool = True
+    color: Optional[str] = None
+    justify: str = "left"
+    padx: int = 30
+    auto_padx: bool = True
+```
 
 <br>
 <a href="https://github-readme-tech-stack.vercel.app">
