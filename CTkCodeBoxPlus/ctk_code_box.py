@@ -9,59 +9,13 @@ import customtkinter
 from .text_menu import TextMenu
 from .add_line_nums import AddLineNums
 from pygments import lex, lexer
-from pygments.lexers import (python, javascript, c_cpp, dotnet, html,
-                             css, data, go, jvm, php, ruby, rust,
-                             scripting, perl, objective, jsx)
 from pygments.styles import get_style_by_name, get_all_styles
+from .constants import common_langs
+from .custom_exception_classes import *
+from .dataclasses import *
 from .keybinding import _register_keybind
-from typing import Union, Optional
+from typing import Union
 import pyperclip
-from dataclasses import dataclass
-
-
-# Custom Exception Classes
-class CTkCodeBoxError(Exception):
-    """Base exception for CTkCodeBoxPlus errors."""
-    pass
-
-
-class LanguageNotAvailableError(CTkCodeBoxError):
-    """Raised when a requested language is not available or not recognized."""
-    pass
-
-
-class ThemeNotAvailableError(CTkCodeBoxError):
-    """Raised when a requested theme name is invalid or not installed."""
-    pass
-
-
-class LexerError(CTkCodeBoxError):
-    """Raised when a provided lexer is invalid or fails to tokenize input."""
-    pass
-
-
-@dataclass(frozen=True)
-class MenuSettings:
-    enabled: bool = True
-    fg_color: Optional[str] = None
-    text_color: Optional[str] = None
-    hover_color: Optional[str] = None
-
-
-@dataclass()
-class HistorySettings:
-    enabled: bool = True
-    cooldown: int = 1500  #ms
-    max: int = 100
-
-
-@dataclass(frozen=True)
-class NumberingSettings:
-    enabled: bool = True
-    color: Optional[str] = None
-    justify: str = "left"
-    padx: int = 30
-    auto_padx: bool = True
 
 
 class CTkCodeBox(customtkinter.CTkTextbox):
@@ -186,30 +140,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         self.theme_name = theme
         self.all_themes = list(get_all_styles())
 
-        self.common_langs = {
-            "python": python.PythonLexer,
-            "c": c_cpp.CLexer,
-            "cpp": c_cpp.CppLexer,
-            "c++": c_cpp.CppLexer,
-            "c#": dotnet.CSharpLexer,
-            "html": html.HtmlLexer,
-            "javascript": javascript.JavascriptLexer,
-            "xml": html.XmlLexer,
-            "css": css.CssLexer,
-            "json": data.JsonLexer,
-            "yaml": data.YamlLexer,
-            "go": go.GoLexer,
-            "typescript": javascript.TypeScriptLexer,
-            "kotlin": jvm.KotlinLexer,
-            "php": php.PhpLexer,
-            "ruby": ruby.RubyLexer,
-            "rust": rust.RustLexer,
-            "lua": scripting.LuaLexer,
-            "java": jvm.JavaLexer,
-            "perl": perl.PerlLexer,
-            "swift": objective.SwiftLexer,
-            "react": jsx.JsxLexer,
-        }
         self.language = language
         self.check_lexer()
         self.configure_tags()
@@ -248,8 +178,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             LanguageNotAvailableError: When string language is unknown.
         """
         if type(self.language) is str:
-            if self.language.lower() in self.common_langs:
-                self.lexer = self.common_langs[self.language.lower()]
+            if self.language.lower() in common_langs:
+                self.lexer = common_langs[self.language.lower()]
             else:
                 raise LanguageNotAvailableError("This language is not available, try to pass the pygments lexer instead. \nAvailable lexers: https://pygments.org/docs/lexers")
         else:
@@ -277,11 +207,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def _schedule_highlight(self, delay: int = 100):
         """Debounce highlighting to improve performance while typing."""
-        try:
-            if self._highlight_job is not None:
-                self.after_cancel(self._highlight_job)
-        except Exception:
-            pass
+        if getattr(self, "_highlight_job", None):
+            self.after_cancel(self._highlight_job)
         self._highlight_job = self.after(delay, self._apply_highlight)
 
     def _apply_highlight(self):
@@ -334,50 +261,72 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             start_line = end_line
             start_index = end_index
 
-    def configure(self, param=None, **kwargs):  #param here ONLY for tklinenums module
+    def _configure_type_check(self, arg, needType, argName):
+        def _check(needT, isList=False):
+            matching = False
+            if isinstance(arg, needT):
+                matching = True
+            else:
+                if not isList:
+                    raise ConfigureBadType(f'Type of provided arg "{argName}" should be {needT}, not {type(arg)}')
+            return matching
+        if isinstance(needType, list):
+            anyMatch = False
+            for t in needType:
+                anyMatch = _check(t, True)
+                if anyMatch:
+                    break
+            if not anyMatch:
+                raise ConfigureBadType(f'Type of provided arg "{argName}" should be one of next: {needType}, not {type(arg)}')
+            return anyMatch
+        else:
+            return _check(needType)
+
+    def configure(self, param=None, **kwargs):  # param here ONLY for tklinenums module
         """Extended configure with CTkCodeBox options.
         Re-highlights when theme or language changes.
         Remaining options are passed to the base widget.
         Args:
-            **kwargs: Configuration parameters (Supports additional keyword options: theme, language, wrap, history_enabled,
+            **kwargs: Configuration parameters
+                    (Supports additional keyword options: theme, language, wrap_enabled, history_enabled,
                     select_color, cursor_color, history_max, history_cooldown, highlight_current_line,
                     current_line_color, history_settings, numbering_padx, numbering_auto_padx, indent_width)
+        Raises:
+            ConfigureBadType: If a type of provided kwargs not the right one
         """
         one_action_handlers = {
-            "history_enabled": self.set_history_enabled,
-            "history_max": self.set_history_limit,
-            "history_cooldown": lambda val: setattr(self.history_settings, "cooldown", val),
-            "history_settings": lambda val: setattr(self, "history_settings", val),
-            "numbering_padx": lambda val: self.line_nums.set_padx(val),
-            "numbering_auto_padx": lambda val: setattr(self.line_nums, "auto_padx", val),
-            "indent_width": lambda val: setattr(self, "indent_width", val),
+            "history_enabled": [self.set_history_enabled, bool],
+            "history_max": [self.set_history_limit, int],
+            "history_cooldown": [lambda val: setattr(self.history_settings, "cooldown", val), int],
+            "history_settings": [lambda val: setattr(self, "history_settings", val), HistorySettings],
+            "numbering_padx": [lambda val: self.line_nums.set_padx(val), int],
+            "numbering_auto_padx": [lambda val: setattr(self.line_nums, "auto_padx", val), bool],
+            "indent_width": [lambda val: setattr(self, "indent_width", val), int],
+            "wrap_enabled": [self.set_wrap, bool]
         }
         for param, value in list(kwargs.items()):
-            if param in one_action_handlers:
-                one_action_handlers[param](value)
-        if "theme" in kwargs:
+            if (param in one_action_handlers and
+                    self._configure_type_check(value, one_action_handlers[param][1], param)):
+                one_action_handlers[param][0](value)
+                kwargs.pop(param)
+        if "theme" in kwargs and self._configure_type_check(kwargs["theme"], str, "theme"):
             self.theme_name = kwargs.pop("theme")
             self.configure_tags()
-        if "language" in kwargs:
+        if "language" in kwargs and self._configure_type_check(kwargs["language"], [str, lexer.Lexer], "language"):
             self.language = kwargs.pop("language")
             self.check_lexer()
-        if "wrap" in kwargs:
-            # Allow external wrap control via standard option
-            wrap_val = kwargs.get("wrap")
-            if isinstance(wrap_val, str):
-                self.wrap_enabled = (wrap_val != "none")
-            elif isinstance(wrap_val, bool):
-                self.wrap_enabled = wrap_val
-        if "select_color" in kwargs:
+        if "select_color" in kwargs and self._configure_type_check(kwargs["select_color"], str, "select_color"):
             self.select_color = kwargs.pop("select_color")
             self._textbox.config(selectbackground=self.select_color)
         else:
             # Keep default selection color updated if user hasn't provided one
             self._apply_selection_colors()
-        if "cursor_color" in kwargs:
+        if "cursor_color" in kwargs and self._configure_type_check(kwargs["cursor_color"], str, "cursor_color"):
             self.cursor_color = kwargs.pop("cursor_color")
             self._textbox.config(insertbackground=self.cursor_color)
-        if "highlight_current_line" in kwargs or "current_line_color" in kwargs or "highlight_current_line_color" in kwargs:
+        if (("highlight_current_line" in kwargs and self._configure_type_check(kwargs["highlight_current_line"], bool, "highlight_current_line"))
+                or ("current_line_color" in kwargs and self._configure_type_check(kwargs["current_line_color"], str, "current_line_color"))
+                or ("highlight_current_line_color" in kwargs and self._configure_type_check(kwargs["highlight_current_line_color"], str, "highlight_current_line_color"))):
             self._highlight_current_line = kwargs.pop("highlight_current_line", self._highlight_current_line)
             self._current_line_color = kwargs.pop("current_line_color", kwargs.pop("highlight_current_line_color", self._current_line_color))
             self.tag_config("current_line", background=self._get_current_line_color())
@@ -402,7 +351,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             "redo_stack": lambda: self._redo_stack,
             "history_cd_active": lambda: True if self._history_typing_cooldown else False,
             "all_themes": lambda: self.all_themes,
-            "common_langs": lambda: self.common_langs,
+            "common_langs": lambda: common_langs,
             "text_menu": lambda: self.text_menu,
             "line_nums": lambda: self.line_nums,
             "history_enabled": lambda: self.history_settings.enabled,
@@ -492,7 +441,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
     # Indentation and auto-indent
     def _on_tab(self, event=None):
         """Indent selection or insert spaces at the caret.
-
         Returns:
              "break" to stop default Tab behavior.
         """
@@ -561,7 +509,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def _on_shift_tab(self, event=None):
         """Outdent selection or current line by one indent width.
-
         Returns:
             "break" to stop default Shift+Tab behavior.
         """
@@ -602,7 +549,10 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             pass
 
     def _on_return(self, event=None):
-        """Insert newline and preserve leading whitespace for auto-indent."""
+        """Insert newline and preserve leading whitespace for auto-indent.
+        Returns:
+            "break" to stop default return behavior.
+        """
         try:
             # Auto-indent: copy leading whitespace from current line
             self._history_push_current()
@@ -633,24 +583,31 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             pass
 
     def cut_text(self):
-        """Cut selected text to clipboard and notify change."""
+        """Cut selected text to clipboard and notify change.
+        Returns:
+            "Not found selected" when nothing is selected.
+            "Success" when success
+            Exception if something goes wrong
+        """
         try:
             if not self.tag_ranges("sel"):
                 return "Not found selected"
             self._history_push_current()
-            try:
-                text = self.get("sel.first", "sel.last")
-                pyperclip.copy(text)
-            except Exception:
-                pass
+            text = self.get("sel.first", "sel.last")
+            pyperclip.copy(text)
             self.delete("sel.first", "sel.last")
             self._notify_content_changed()
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     def copy_text(self):
-        """Copy selected text to clipboard."""
+        """Copy selected text to clipboard.
+        Returns:
+            "Not found selected" when nothing is selected.
+            "Success" when success
+            Exception if something goes wrong
+        """
         try:
             if not self.tag_ranges("sel"):
                 return "Not found selected"
@@ -658,10 +615,15 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             pyperclip.copy(text)
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     def paste_text(self):
-        """Paste clipboard text, replacing selection if present, and refresh highlighting/lines."""
+        """Paste clipboard text, replacing selection if present, and refresh highlighting/lines.
+        Returns:
+            "Clipboard empty" when clipboard is empty.
+            "Success" when success
+            Exception if something goes wrong
+        """
         try:
             text = pyperclip.paste()
         except Exception:
@@ -680,34 +642,45 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self._schedule_highlight(0)
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     def clear_all_text(self):
-        """Delete all content and notify change."""
+        """Delete all content and notify change.
+        Returns:
+            "Success" when success
+            Exception if something goes wrong
+        """
         try:
             self._history_push_current()
             self.delete("1.0", "end")
             self._notify_content_changed()
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     def select_all_text(self):
-        """Select all content."""
+        """Select all content.
+        Returns:
+            "Success" when success
+            Exception if something goes wrong
+        """
         try:
             self.tag_add("sel", "1.0", "end-1c")
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     # History API
     def set_history_enabled(self, enabled: bool):
         """Enable/disable the internal undo/redo history."""
         self.history_settings.enabled = bool(enabled)
-        return "Success"
 
     def set_history_limit(self, limit: int):
-        """Set maximum number of undo frames to keep."""
+        """Set maximum number of undo frames to keep.
+        Returns:
+            "Success" when success
+            Exception if something goes wrong
+        """
         try:
             self.history_settings.max = max(0, int(limit))
             # Trim if needed
@@ -715,17 +688,20 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                 self._undo_stack = self._undo_stack[-self.history_settings.max:]
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     def clear_history(self):
         """Clear undo and redo stacks."""
         self._undo_stack.clear()
         self._redo_stack.clear()
-        return "Success"
 
     def undo(self):
-        """Undo the last change if history is enabled."""
-
+        """Undo the last change if history is enabled.
+        Returns:
+            "Nothing to undo" when undo stack is empty or history is disabled.
+            "Success" when success
+            Exception if something goes wrong
+        """
         if not self.history_settings.enabled or not self._undo_stack:
             return "Nothing to undo"
         try:
@@ -736,10 +712,15 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self._notify_content_changed()
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     def redo(self):
-        """Redo the last undone change if available."""
+        """Redo the last undone change if available.
+        Returns:
+            "Nothing to redo" when redo stack is empty or history is disabled.
+            "Success" when success
+            Exception if something goes wrong
+        """
         if not self.history_settings.enabled or not self._redo_stack:
             return "Nothing to redo"
         try:
@@ -750,7 +731,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self._notify_content_changed()
             return "Success"
         except Exception:
-            return None
+            return Exception
 
     # Internal history helpers
     def _save_state(self):
@@ -922,7 +903,10 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         return None
 
     def _on_backspace(self, event=None):
-        """Smart-backspace: delete paired quotes/brackets if cursor is between them."""
+        """Smart-backspace: delete paired quotes/brackets if cursor is between them.
+        Returns:
+            "break" to stop default backspace behavior.
+        """
         self._history_push_current()
         self._notify_content_changed()
         try:
@@ -943,7 +927,10 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     # Double-click smart selection (token expansion only)
     def _on_double_click(self, event):
-        """Expand selection to a token at clicked index (word/space/special)."""
+        """Expand selection to a token at clicked index (word/space/special).
+        Returns:
+            "break" to stop default double click behavior.
+        """
         try:
             idx = self.index(f"@{event.x},{event.y}")
             # Token selection
@@ -957,7 +944,10 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         return None
 
     def _on_triple_click(self, event):
-        """Select the entire clicked line."""
+        """Select the entire clicked line.
+        Returns:
+            "break" to stop default triple click behavior.
+        """
         try:
             line_start = self.index(f"@{event.x},{event.y} linestart")
             line_end = self.index(f"@{event.x},{event.y} lineend")
