@@ -25,4 +25,12 @@ class NumberingSettings:
     padx: int = 30
     auto_padx: bool = True
 
-__all__ = ["MenuSettings", "HistorySettings", "NumberingSettings"]
+
+@dataclass(frozen=True)
+class ReplaceResult:
+    """Result of a replace operation."""
+    count: int
+    error: Optional[str] = None
+
+
+__all__ = ["MenuSettings", "HistorySettings", "NumberingSettings", "ReplaceResult"]

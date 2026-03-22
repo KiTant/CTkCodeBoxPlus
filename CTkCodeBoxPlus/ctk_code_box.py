@@ -6,14 +6,15 @@ License: MIT
 """
 
 import customtkinter
+import re
 from .text_menu import TextMenu
 from .add_line_nums import AddLineNums
 from pygments import lex, lexer
 from pygments.styles import get_style_by_name, get_all_styles
-from .constants import common_langs
+from .constants import *
 from .custom_exception_classes import *
 from .dataclasses import *
-from .keybinding import _register_keybind
+from .keybinding import register_keybind
 from typing import Union
 import pyperclip
 
@@ -48,7 +49,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                  indent_width: int = 4,
                  **kwargs):
         """Initialize a CTkCodeBox instance.
-
         Args:
             master: Parent widget.
             language: Pygments language name (str) or a lexer class.
@@ -67,10 +67,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         """
         # Do not enable Tk's built-in undo/history
         if 'undo' in kwargs and history_settings.enabled:
-            try:
-                del kwargs['undo']
-            except Exception:
-                kwargs.pop('undo', None)
+            kwargs.pop('undo', None)
         super().__init__(master, height=height, **kwargs)
 
         # Wrap management
@@ -95,12 +92,12 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         self.bind('<KeyRelease>', self.update_code)  # When a key is released, update the code
         self.bind('<<ContentChanged>>', self.update_code)
         # Use keybindings for common editing actions (widget scope)
-        _register_keybind(self, "CmdOrCtrl+A", lambda: self.select_all_text(), bind_scope='widget')
-        _register_keybind(self, "CmdOrCtrl+X", lambda: self.cut_text(), bind_scope='widget')
-        _register_keybind(self, "CmdOrCtrl+C", lambda: self.copy_text(), bind_scope='widget')
-        _register_keybind(self, "CmdOrCtrl+V", lambda: self.paste_text(), bind_scope='widget')
-        _register_keybind(self, "CmdOrCtrl+Shift+Z", lambda: self.redo(), bind_scope='widget')
-        _register_keybind(self, "CmdOrCtrl+Z", lambda: self.undo(), bind_scope='widget')
+        register_keybind(self, "CmdOrCtrl+A", lambda: self.select_all_text(), bind_scope='widget')
+        register_keybind(self, "CmdOrCtrl+X", lambda: self.cut_text(), bind_scope='widget')
+        register_keybind(self, "CmdOrCtrl+C", lambda: self.copy_text(), bind_scope='widget')
+        register_keybind(self, "CmdOrCtrl+V", lambda: self.paste_text(), bind_scope='widget')
+        register_keybind(self, "CmdOrCtrl+Shift+Z", lambda: self.redo(), bind_scope='widget')
+        register_keybind(self, "CmdOrCtrl+Z", lambda: self.undo(), bind_scope='widget')
 
         # Custom history (undo/redo)
         self._undo_stack = []
@@ -132,10 +129,10 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         # Indentation settings and keybindings
         self.indent_width = int(indent_width)
         # Register layout/platform-independent editing keys
-        _register_keybind(self, 'TAB', lambda: self._on_tab(), bind_scope='widget')
+        register_keybind(self, 'TAB', lambda: self._on_tab(), bind_scope='widget')
         # Use Shift-Tab for outdent;
-        _register_keybind(self, 'Shift+TAB', lambda: self._on_shift_tab(), bind_scope='widget')
-        _register_keybind(self, 'RETURN', lambda: self._on_return(), bind_scope='widget')
+        register_keybind(self, 'Shift+TAB', lambda: self._on_shift_tab(), bind_scope='widget')
+        register_keybind(self, 'RETURN', lambda: self._on_return(), bind_scope='widget')
 
         self.theme_name = theme
         self.all_themes = list(get_all_styles())
@@ -224,7 +221,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         """Remove all highlighting tags while preserving selection."""
         for tag in self.tag_names():
             # Preserve current selection while re-highlighting
-            if tag == "sel":
+            if tag == "sel" or tag == _SEARCH_TAG:
                 continue
             self.tag_remove(tag, '0.0', 'end')
 
@@ -318,9 +315,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         if "select_color" in kwargs and self._configure_type_check(kwargs["select_color"], str, "select_color"):
             self.select_color = kwargs.pop("select_color")
             self._textbox.config(selectbackground=self.select_color)
-        else:
-            # Keep default selection color updated if user hasn't provided one
-            self._apply_selection_colors()
         if "cursor_color" in kwargs and self._configure_type_check(kwargs["cursor_color"], str, "cursor_color"):
             self.cursor_color = kwargs.pop("cursor_color")
             self._textbox.config(insertbackground=self.cursor_color)
@@ -333,8 +327,12 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
         # Re-apply highlighting if theme or language changed
         self._schedule_highlight(0)
+        # Update selection colors if fg_color is being changed (theme change)
+        needs_selection_update = "fg_color" in kwargs and not self.select_color
         if kwargs:
             super().configure(**kwargs)
+        if needs_selection_update:
+            self._apply_selection_colors()
 
     def cget(self, param):
         """Get configuration parameter value with support for custom parameters.
@@ -369,6 +367,124 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         if param in custom_params:
             return custom_params[param]()
         return super().cget(param)
+
+    def clear_search_highlight(self):
+        """Remove all search highlight tags."""
+        try:
+            self.tag_remove(_SEARCH_TAG, "1.0", "end")
+        except Exception:
+            pass
+
+    def _configure_search_tag(self):
+        """Configure visual style for search highlights (idempotent)."""
+        try:
+            # Light yellow highlight; keep text color unchanged
+            self.tag_config(_SEARCH_TAG, background="#f7ea8f")
+        except Exception:
+            pass
+
+    def _build_search_regex(self, pattern: str, match_case: bool, words: bool, regex: bool):
+        """Return compiled regex respecting flags."""
+        flags = 0 if match_case else re.IGNORECASE
+        if not regex:
+            pattern = re.escape(pattern)
+        if words:
+            pattern = r"\b" + pattern + r"\b"
+        try:
+            return re.compile(pattern, flags)
+        except re.error as e:
+            raise ValueError(f"Invalid regex pattern: {e}") from e
+
+    def search(self, pattern: str, match_case: bool = False, words: bool = False,
+               regex: bool = False, start: str = "1.0", end: str = "end-1c"):
+        """Find all matches and highlight them.
+        Args:
+            pattern: Text or regex to find.
+            match_case: If False, search ignores case.
+            words: If True, match whole words only.
+            regex: If True, treat pattern as regex (otherwise literal).
+            start: Start index for search (Tk text index).
+            end: End index for search (Tk text index, non-inclusive).
+        Returns:
+            List of (start_index, end_index) tuples for matches.
+        """
+        self.clear_search_highlight()
+        if not pattern:
+            return []
+        text = self.get(start, end)
+        try:
+            compiled = self._build_search_regex(pattern, match_case, words, regex)
+        except ValueError:
+            return []
+        matches = []
+        base_index = self.index(start)
+        for match in compiled.finditer(text):
+            if match.start() == match.end():
+                continue
+            idx_start = self.index(f"{base_index}+{match.start()}c")
+            idx_end = self.index(f"{base_index}+{match.end()}c")
+            matches.append((idx_start, idx_end))
+        if matches:
+            self._configure_search_tag()
+            for s, e in matches:
+                try:
+                    self.tag_add(_SEARCH_TAG, s, e)
+                except Exception:
+                    pass
+            try:
+                self.tag_lower(_SEARCH_TAG, "sel")
+            except Exception:
+                pass
+            # Do not re-highlight to preserve search tag; caller may request manually
+            return matches
+        return matches
+
+    def replace(self, symbols_to_find: str, symbols_to_replace: str, replace_all: bool = True,
+                index_range: tuple = None, match_case: bool = False, words: bool = False, regex: bool = False):
+        """Replace occurrences of text.
+        Args:
+            symbols_to_find: Text or regex to search for.
+            symbols_to_replace: Replacement text.
+            replace_all: If True, replace in the whole buffer; otherwise only in index_range/selection.
+            index_range: (start, end) Tk indices used when replace_all is False and no selection exists.
+            match_case: Respect case when True.
+            words: Match whole words only.
+            regex: Treat symbols_to_find as regex when True.
+        Returns:
+            ReplaceResult with count of replacements and optional error message.
+        """
+        if not symbols_to_find:
+            return ReplaceResult(count=0)
+        try:
+            compiled = self._build_search_regex(symbols_to_find, match_case, words, regex)
+        except ValueError as e:
+            return ReplaceResult(count=0, error=str(e))
+        # Determine target range
+        start_idx, end_idx = "1.0", "end-1c"
+        if not replace_all:
+            if self.tag_ranges("sel"):
+                start_idx, end_idx = self.index("sel.first"), self.index("sel.last")
+            elif index_range and len(index_range) == 2:
+                start_idx, end_idx = index_range
+            else:
+                return ReplaceResult(count=0, error="index_range required for partial replace")
+        try:
+            segment = self.get(start_idx, end_idx)
+        except Exception as err:
+            return ReplaceResult(count=0, error=f"failed to get text range: {err}")
+        new_text, count = compiled.subn(symbols_to_replace, segment)
+        if count == 0:
+            return ReplaceResult(count=0)
+        try:
+            self._history_push_current()
+            self.delete(start_idx, end_idx)
+            self.insert(start_idx, new_text, push_history=False)
+            self.clear_search_highlight()
+            self._notify_content_changed()
+            self._schedule_highlight(0)
+        except Exception as err:
+            return ReplaceResult(count=0, error=f"replace failed: {err}")
+        return ReplaceResult(count=count)
 
     # General helpers
     def set_wrap(self, enabled: bool):
@@ -598,8 +714,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self.delete("sel.first", "sel.last")
             self._notify_content_changed()
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     def copy_text(self):
         """Copy selected text to clipboard.
@@ -614,8 +730,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             text = self.get("sel.first", "sel.last")
             pyperclip.copy(text)
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     def paste_text(self):
         """Paste clipboard text, replacing selection if present, and refresh highlighting/lines.
@@ -641,8 +757,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             # Ensure quick re-highlight for multi-line pastes
             self._schedule_highlight(0)
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     def clear_all_text(self):
         """Delete all content and notify change.
@@ -655,8 +771,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self.delete("1.0", "end")
             self._notify_content_changed()
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     def select_all_text(self):
         """Select all content.
@@ -667,8 +783,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         try:
             self.tag_add("sel", "1.0", "end-1c")
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     # History API
     def set_history_enabled(self, enabled: bool):
@@ -687,8 +803,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             if self.history_settings.max and len(self._undo_stack) > self.history_settings.max:
                 self._undo_stack = self._undo_stack[-self.history_settings.max:]
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     def clear_history(self):
         """Clear undo and redo stacks."""
@@ -711,8 +827,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self._restore_state(state)
             self._notify_content_changed()
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     def redo(self):
         """Redo the last undone change if available.
@@ -730,8 +846,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self._restore_state(state)
             self._notify_content_changed()
             return "Success"
-        except Exception:
-            return Exception
+        except Exception as err:
+            return err
 
     # Internal history helpers
     def _save_state(self):
@@ -907,20 +1023,32 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         Returns:
             "break" to stop default backspace behavior.
         """
-        self._history_push_current()
-        self._notify_content_changed()
         try:
-            # If there is a selection, let default backspace handle it (history is handled elsewhere)
+            # If there is a selection, let default backspace handle it
             if self.tag_ranges('sel'):
+                self._history_push_current()
+                self._notify_content_changed()
                 return None
+            # Check if cursor is at the very beginning (nothing to delete)
+            if not self.compare("insert", '>', '1.0'):
+                return None
+            
             # Check if we're between a pair: (), [], {}, <>, '' , "", ``
-            prev_ch = self.get("insert -1c", "insert") if self.compare("insert", '>', '1.0') else ''
+            prev_ch = self.get("insert -1c", "insert")
             next_ch = self.get("insert", "insert +1c")
             pairs = {('(', ')'), ('[', ']'), ('{', '}'), ('<', '>')}
+            
             if prev_ch and next_ch:
                 if (prev_ch, next_ch) in pairs or (prev_ch == next_ch and prev_ch in ('"', "'", '`')):
+                    # Paired deletion: push history and delete both chars
+                    self._history_push_current()
                     self.delete("insert -1c", "insert +1c")
+                    self._notify_content_changed()
                     return "break"
+            # Regular backspace: let default handler run
+            self._history_push_current()
+            self._notify_content_changed()
+            return None
         except Exception:
             pass
         return None

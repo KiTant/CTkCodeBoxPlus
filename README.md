@@ -12,6 +12,7 @@ A code editor widget for customtkinter (Enhanced Edition).
 - Custom history with undo and redo (Enhanced)
 - Smart selection on double and triple click (Enhanced)
 - Implemented actions like copy, paste, cut (Enhanced)
+- Search with highlight and replace methods
 - Keybindings for implemented actions (Enhanced)
 - Multiple Themes
 - Right-click menu (Enhanced)
@@ -69,7 +70,10 @@ root.mainloop()
 - **.reset_edited()**: Reset edited state flag to False
 - **.cut_text()**: Cut selected text to clipboard and notify change
 - **.copy_text()**: Copy selected text to clipboard
+- **.replace(symbols_to_find, symbols_to_replace, replace_all, index_range, match_case, words, regex)**: Replace occurrences of text
+- **.search(pattern, match_case, words, regex, start, end)**: Find all matches and highlight them
 - **.paste_text()**: Paste clipboard text, replacing selection if present, and refresh highlighting/lines with notify change
+- **.clear_search_highlight()**: Remove all search highlight tags
 - **.clear_all_text()**: Delete all content and notify change
 - **.select_all_text()**: Select all content
 - **.set_history_enabled(enabled)**: Enable/disable the internal undo/redo history
@@ -100,6 +104,12 @@ class NumberingSettings:
     justify: str = "left"
     padx: int = 30
     auto_padx: bool = True
+
+@dataclass(frozen=True)
+class ReplaceResult:
+    """Result of a replace operation."""
+    count: int
+    error: Optional[str] = None
 ```
 
 <br>

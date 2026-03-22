@@ -40,3 +40,7 @@ common_langs = {
     "swift": objective.SwiftLexer,
     "react": jsx.JsxLexer,
 }
+
+_SEARCH_TAG = "_ctkcodebox_search"
+
+__all__ = ["common_langs", "_SEARCH_TAG"]

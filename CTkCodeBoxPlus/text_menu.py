@@ -1,6 +1,7 @@
 import customtkinter
 import tkinter
 import sys
+import pyperclip
 
 
 class TextMenu(tkinter.Menu):
@@ -92,9 +93,9 @@ class TextMenu(tkinter.Menu):
             has_text = False
         # Clipboard text?
         try:
-            clip = self.clipboard_get()
+            clip = pyperclip.paste()
             has_clip = isinstance(clip, str) and len(clip) > 0
-        except tkinter.TclError:
+        except Exception:
             has_clip = False
         # Undo history?
         try:
