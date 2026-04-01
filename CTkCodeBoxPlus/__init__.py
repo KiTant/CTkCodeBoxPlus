@@ -6,7 +6,7 @@ License: MIT
 Homepage: https://github.com/KiTant/CTkCodeBoxPlus
 """
 
-__version__ = '1.3'
+__version__ = '1.4'
 
 from .ctk_code_box import CTkCodeBox
 from .dataclasses import *
@@ -14,7 +14,9 @@ from .custom_exception_classes import *
 from .text_menu import TextMenu
 from .add_line_nums import AddLineNums
 from .keybinding import unregister_keybind, register_keybind
+from .search_replace_window import SearchReplaceWindow
 
-__all__ = ["CTkCodeBox", "HistorySettings", "MenuSettings", "NumberingSettings", "TextMenu",
-           "AddLineNums", "unregister_keybind", "register_keybind", "CTkCodeBoxError",
-           "LanguageNotAvailableError", "ThemeNotAvailableError", "LexerError", "ConfigureBadType"]
+__all__ = ["CTkCodeBox", "HistorySettings", "MenuSettings", "NumberingSettings", "ReplaceResult", "TextMenu",
+           "AddLineNums", "unregister_keybind", "register_keybind", "CTkCodeBoxError", "KeybindingSettings",
+           "LanguageNotAvailableError", "ThemeNotAvailableError", "LexerError", "ConfigureBadType",
+           "SearchReplaceWindow"]

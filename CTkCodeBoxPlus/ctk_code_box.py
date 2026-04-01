@@ -16,6 +16,7 @@ from .custom_exception_classes import *
 from .dataclasses import *
 from .keybinding import register_keybind
 from typing import Union
+from .search_replace_window import SearchReplaceWindow
 import pyperclip
 
 
@@ -40,6 +41,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                  theme: str = "solarized-light",
                  numbering_settings: NumberingSettings = NumberingSettings(),
                  menu_settings: MenuSettings = MenuSettings(),
+                 keybinding_settings: KeybindingSettings = KeybindingSettings(),
+                 search_window_settings: SearchWindowSettings = SearchWindowSettings(),
                  wrap: bool = True,
                  select_color: str = None,
                  cursor_color: str = None,
@@ -56,6 +59,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             theme: Pygments style name used for highlighting.
             numbering_settings: NumberingSettings object for the line nums.
             menu_settings: MenuSettings object for the context menu.
+            keybinding_settings: KeybindingSettings object for keybindings
+            search_window_settings: SearchWindowSettings object by default for search & replace window
             wrap: Enable word wrap.
             select_color: Override selection background color.
             cursor_color: Cursor color I (blinking).
@@ -66,9 +71,11 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             **kwargs: Additional arguments passed to CTkTextbox.
         """
         # Do not enable Tk's built-in undo/history
-        if 'undo' in kwargs and history_settings.enabled:
+        if 'undo' in kwargs and not history_settings.built_in_undo:
             kwargs.pop('undo', None)
         super().__init__(master, height=height, **kwargs)
+
+        self.search_window_settings = search_window_settings
 
         # Wrap management
         self.wrap_enabled = bool(wrap)
@@ -91,13 +98,13 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
         self.bind('<KeyRelease>', self.update_code)  # When a key is released, update the code
         self.bind('<<ContentChanged>>', self.update_code)
-        # Use keybindings for common editing actions (widget scope)
-        register_keybind(self, "CmdOrCtrl+A", lambda: self.select_all_text(), bind_scope='widget')
-        register_keybind(self, "CmdOrCtrl+X", lambda: self.cut_text(), bind_scope='widget')
-        register_keybind(self, "CmdOrCtrl+C", lambda: self.copy_text(), bind_scope='widget')
-        register_keybind(self, "CmdOrCtrl+V", lambda: self.paste_text(), bind_scope='widget')
-        register_keybind(self, "CmdOrCtrl+Shift+Z", lambda: self.redo(), bind_scope='widget')
-        register_keybind(self, "CmdOrCtrl+Z", lambda: self.undo(), bind_scope='widget')
+
+        for func, k in asdict(keybinding_settings).items():
+            command = getattr(self, func[2:])
+            if func[0:2] != "B_" and k:
+                register_keybind(self, k, command, bind_scope='widget')
+            elif k:
+                self.bind(k, command, add=True)
 
         # Custom history (undo/redo)
         self._undo_stack = []
@@ -126,13 +133,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         # Re-apply selection colors on focus (helps when theme changes)
         self.bind('<FocusIn>', lambda e: self._apply_selection_colors(), add=True)
 
-        # Indentation settings and keybindings
+        # Indentation width
         self.indent_width = int(indent_width)
-        # Register layout/platform-independent editing keys
-        register_keybind(self, 'TAB', lambda: self._on_tab(), bind_scope='widget')
-        # Use Shift-Tab for outdent;
-        register_keybind(self, 'Shift+TAB', lambda: self._on_shift_tab(), bind_scope='widget')
-        register_keybind(self, 'RETURN', lambda: self._on_return(), bind_scope='widget')
 
         self.theme_name = theme
         self.all_themes = list(get_all_styles())
@@ -141,29 +143,16 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         self.check_lexer()
         self.configure_tags()
         self.edited = False
+        self._search_window_active = None
         # Capture initial state for history
         self._history_push_current()
         # Capture history for general typing
         self.bind("<KeyPress>", self._on_keypress_history, add=True)
         self.bind("<Shift-KeyPress>", self._on_keypress_history, add=True)
-        # Quote wrapping on selection
-        self.bind("<KeyPress-'>", self._on_quote_single, add=True)
-        self.bind('<KeyPress-">', self._on_quote_double, add=True)
-        self.bind("<KeyPress-grave>", self._on_backtick, add=True)          # `
-        # Bracket/angle wrapping on selection
-        self.bind("<KeyPress-parenleft>", self._on_parenleft, add=True)      # (
-        self.bind("<KeyPress-bracketleft>", self._on_bracketleft, add=True)  # [
-        self.bind("<KeyPress-braceleft>", self._on_braceleft, add=True)      # {
-        self.bind("<KeyPress-less>", self._on_less, add=True)                # <
-        # Pair backspace handler
-        self.bind("<KeyPress-BackSpace>", self._on_backspace, add=True)
-
-        # Smarter selection on double-click and triple-click
-        self.bind("<Double-Button-1>", self._on_double_click, add=True)
-        self.bind("<Triple-Button-1>", self._on_triple_click, add=True)
 
         if menu_settings.enabled:
-            self.text_menu = TextMenu(self, fg_color=menu_settings.fg_color, text_color=menu_settings.text_color, hover_color=menu_settings.hover_color)
+            self.text_menu = TextMenu(self, fg_color=menu_settings.fg_color, text_color=menu_settings.text_color, hover_color=menu_settings.hover_color,
+                                      commands=menu_settings.commands)
 
     def check_lexer(self):
         """Resolve and set the lexer.
@@ -221,7 +210,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         """Remove all highlighting tags while preserving selection."""
         for tag in self.tag_names():
             # Preserve current selection while re-highlighting
-            if tag == "sel" or tag == _SEARCH_TAG:
+            if tag == "sel" or tag == SEARCH_TAG:
                 continue
             self.tag_remove(tag, '0.0', 'end')
 
@@ -371,7 +360,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
     def clear_search_highlight(self):
         """Remove all search highlight tags."""
         try:
-            self.tag_remove(_SEARCH_TAG, "1.0", "end")
+            self.tag_remove(SEARCH_TAG, "1.0", "end")
         except Exception:
             pass
 
@@ -379,7 +368,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         """Configure visual style for search highlights (idempotent)."""
         try:
             # Light yellow highlight; keep text color unchanged
-            self.tag_config(_SEARCH_TAG, background="#f7ea8f")
+            self.tag_config(SEARCH_TAG, background="#f7ea8f")
         except Exception:
             pass
 
@@ -428,11 +417,11 @@ class CTkCodeBox(customtkinter.CTkTextbox):
             self._configure_search_tag()
             for s, e in matches:
                 try:
-                    self.tag_add(_SEARCH_TAG, s, e)
+                    self.tag_add(SEARCH_TAG, s, e)
                 except Exception:
                     pass
             try:
-                self.tag_lower(_SEARCH_TAG, "sel")
+                self.tag_lower(SEARCH_TAG, "sel")
             except Exception:
                 pass
             # Do not re-highlight to preserve search tag; caller may request manually
@@ -485,6 +474,16 @@ class CTkCodeBox(customtkinter.CTkTextbox):
         except Exception as err:
             return ReplaceResult(count=0, error=f"replace failed: {err}")
         return ReplaceResult(count=count)
+
+    def open_search_window(self, search_window_settings: SearchWindowSettings = None):
+        """Open search & replace window"""
+        if not self._search_window_active:
+            self._search_window_active = SearchReplaceWindow(self, self.search_window_settings if not search_window_settings else search_window_settings)
+
+    def close_search_window(self):
+        """Close search & replace window"""
+        if self._search_window_active:
+            self._search_window_active._on_close()
 
     # General helpers
     def set_wrap(self, enabled: bool):
@@ -568,10 +567,10 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                 end_line = int(self.index("sel.last").split(".")[0])
                 spaces = " " * self.indent_width
                 for line in range(start_line, end_line + 1):
-                    self.insert(f"{line}.0", spaces)
+                    self.insert(f"{line}.0", spaces, push_history=False)
                 self._notify_content_changed()
             else:
-                self.insert("insert", " " * self.indent_width)
+                self.insert("insert", " " * self.indent_width, push_history=False)
                 self._notify_content_changed()
         except Exception:
             pass
@@ -680,7 +679,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                     leading_ws += ch
                 else:
                     break
-            self.insert("insert", "\n" + leading_ws)
+            self.insert("insert", "\n" + leading_ws, push_history=False)
             self._notify_content_changed()
         except Exception:
             pass
@@ -752,7 +751,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                 # Replace selection
                 self.delete("sel.first", "sel.last")
             # Insert at cursor
-            self.insert(self.index('insert'), text)
+            self.insert(self.index('insert'), text, push_history=False)
             self._notify_content_changed()
             # Ensure quick re-highlight for multi-line pastes
             self._schedule_highlight(0)
@@ -919,7 +918,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                       "F7","F8","F9","F10","F11","F12","Left","Right","Up","Down","Home","End",
                       "Next"):
                 return
-            is_content_key = bool(getattr(event, 'char', '')) or ks in ("BackSpace","Delete","Return","Tab")
+            is_content_key = bool(getattr(event, 'char', '')) or ks == "Delete"
             if not is_content_key:
                 return
             if self._history_typing_cooldown is None:
@@ -977,8 +976,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
                 start = self.index("sel.first")
                 end = self.index("sel.last")
                 # Insert right first to preserve start index
-                self.insert(end, close_ch)
-                self.insert(start, open_ch)
+                self.insert(end, close_ch, push_history=False)
+                self.insert(start, open_ch, push_history=False)
                 # Keep original inner selection
                 try:
                     new_start = self.index(f"{start} +1c")
@@ -1006,7 +1005,7 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
                 # Perform auto-pair insertion
                 self._history_push_current()
-                self.insert("insert", open_ch + close_ch)
+                self.insert("insert", open_ch + close_ch, push_history=False)
                 # Move cursor between the pair
                 try:
                     self.mark_set("insert", "insert -1c")

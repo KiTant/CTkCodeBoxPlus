@@ -165,14 +165,14 @@ def _get_transient_master(widget: Any) -> Any | None:
 
 
 def _get_group_id(widget: Any) -> int:
-    """Return group id: transient master id if present, else widget's toplevel id."""
+    """Return group id: transient master id if present, else widget's toplevel id.
+    Uses Python's id() instead of winfo_id() to avoid potential ID reuse 
+    collisions when widgets are destroyed and recreated by the OS.
+    """
     try:
         tl = widget.winfo_toplevel()
         master = _get_transient_master(tl) or None
-        try:
-            return int((master or tl).winfo_id())
-        except Exception:
-            return int(tl.winfo_id())
+        return id(master or tl)
     except Exception:
         return 0  # Fallback for invalid widgets
 
@@ -291,7 +291,7 @@ def register_keybind(widget_or_root: Any, keybind: str, callback: Callable, *, b
         return
 
     # Store binding info
-    target_id = target.winfo_id()
+    target_id = id(target)
     bindings = _GLOBAL_KEY_BINDINGS.setdefault(target_id, {})
     modifier_bindings = bindings.setdefault(mods_key, {})
     callbacks = modifier_bindings.setdefault(keycode, [])
@@ -375,8 +375,14 @@ def register_keybind(widget_or_root: Any, keybind: str, callback: Callable, *, b
         _HANDLER_STORAGE[target_id][handler_attr] = _handle_key_press
 
         # Set up cleanup on window destroy
-        def _on_destroy(event, t_id=target_id):
-            _cleanup_target(t_id)
+        # <Destroy> bubbles up from child widgets to parents.
+        # We must only cleanup when the target itself is destroyed, not a child.
+        def _on_destroy(event, t_id=target_id, tgt=target):
+            try:
+                if str(event.widget) == str(getattr(tgt, '_w', '')):
+                    _cleanup_target(t_id)
+            except Exception:
+                pass
         try:
             # Only bind to toplevel for destroy event
             if bind_scope == 'window':
@@ -448,7 +454,7 @@ def unregister_keybind(widget_or_root: Any, keybind: str, callback: Callable | N
     else:
         return False
 
-    target_id = target.winfo_id()
+    target_id = id(target)
     bindings = _GLOBAL_KEY_BINDINGS.get(target_id)
     if not bindings:
         return False

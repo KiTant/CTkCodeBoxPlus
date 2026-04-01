@@ -41,6 +41,6 @@ common_langs = {
     "react": jsx.JsxLexer,
 }
 
-_SEARCH_TAG = "_ctkcodebox_search"
+SEARCH_TAG = "_ctkcodebox_search"
 
-__all__ = ["common_langs", "_SEARCH_TAG"]
+__all__ = ["common_langs", "SEARCH_TAG"]

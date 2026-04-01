@@ -6,13 +6,11 @@ import pyperclip
 
 class TextMenu(tkinter.Menu):
     """Popup text menu for CTkCodeBox.
-
     Provides a context (right-click) menu for a CTkCodeBox widget with
     common edit actions: Copy, Paste, Cut, Select All and, when history is
     enabled, Undo/Redo. Menu item availability is updated just before the menu
     is shown. Accelerator labels adapt to the platform (Cmd on macOS, Ctrl
     elsewhere).
-
     Notes:
         Original author: Akash Bora (Akascape) — https://github.com/Akascape
         Modified by: xzyqox (KiTant) — https://github.com/KiTant
@@ -22,14 +20,15 @@ class TextMenu(tkinter.Menu):
                  fg_color=None,
                  text_color=None,
                  hover_color=None,
+                 commands: dict = None,
                  **kwargs):
         """Initialize a TextMenu instance.
-
         Args:
             widget: The CTkCodeBox widget instance this menu controls.
             fg_color: Menu background color. Defaults to the current theme.
             text_color: Menu text color. Defaults to the current theme.
             hover_color: Active item background color. Defaults to the current theme.
+            commands: Commands to add in menu.
             **kwargs: Additional arguments passed to tkinter.Menu.
         """
 
@@ -40,30 +39,34 @@ class TextMenu(tkinter.Menu):
         self.hover_color = customtkinter.ThemeManager.theme["CTkButton"]["hover_color"] if hover_color is None else hover_color
         
         self.widget = widget
+        self.labels_states = {"has_selection": [], "has_clip": [], "has_text": [], "has_undo": [], "has_redo": []}
         
         # Platform-aware accelerator labels (Cmd on macOS, Ctrl elsewhere)
         def accel_label(s: str) -> str:
             return s.replace("Ctrl", "Cmd") if sys.platform == "darwin" else s
 
-        self.add_command(label="Copy", command=self.widget.copy_text, accelerator=accel_label("Ctrl+C"))
-        self.add_command(label="Paste", command=self.widget.paste_text, accelerator=accel_label("Ctrl+V"))
-        self.add_command(label="Cut", command=self.widget.cut_text, accelerator=accel_label("Ctrl+X"))
-        self.add_command(label="Select All", command=self.widget.select_all_text, accelerator=accel_label("Ctrl+A"))
-        if self.widget.cget("history_enabled"):
-            self.add_separator()
-            self.add_command(label="Undo", command=self.widget.undo, accelerator=accel_label("Ctrl+Z"))
-            self.add_command(label="Redo", command=self.widget.redo, accelerator=accel_label("Ctrl+Shift+Z"))
+        for label, settings in commands.items():
+            if label == "separator" and (settings is None or (callable(settings) and settings()) or self.widget.cget(settings)):
+                self.add_separator()
+                continue
+            elif label == "separator":
+                continue
+            if settings[3] is None or ((callable(settings[3]) and settings[3]()) or self.widget.cget(settings[3])):
+                command = settings[1] if callable(settings[1]) else getattr(self.widget, settings[1])
+                state = settings[0]
+                self.add_command(label=label, command=command, accelerator=accel_label(settings[2]))
+                if not state:
+                    continue
+                self.labels_states[state].append(label)
 
         self.widget.bind("<Button-3>", lambda event: self.do_popup(event))
         self.widget.bind("<Button-2>", lambda event: self.do_popup(event))
         
     def do_popup(self, event):
         """Show the popup menu at the event location.
-
         Args:
             event: The mouse event whose screen coordinates are used to position
                 the menu.
-
         This updates menu item states and applies appearance-mode colors before
         showing the menu.
         """
@@ -77,7 +80,6 @@ class TextMenu(tkinter.Menu):
                 
     def _update_states(self):
         """Update enabled/disabled state of menu items based on widget/clipboard state.
-
         Considers current selection, presence of text content, clipboard text
         availability, and undo/redo history (when available).
         """
@@ -115,9 +117,7 @@ class TextMenu(tkinter.Menu):
             except Exception:
                 pass
 
-        set_state("Cut", has_selection)
-        set_state("Copy", has_selection)
-        set_state("Paste", has_clip)
-        set_state("Select All", has_text)
-        set_state("Undo", has_undo)
-        set_state("Redo", has_redo)
+        states = {"has_selection": has_selection, "has_clip": has_clip, "has_text": has_text, "has_undo": has_undo, "has_redo": has_redo}
+        for state, labels in self.labels_states.items():
+            for label in labels:
+                set_state(label, states[state])
