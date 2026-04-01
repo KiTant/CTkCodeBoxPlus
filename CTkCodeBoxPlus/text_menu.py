@@ -110,14 +110,14 @@ class TextMenu(tkinter.Menu):
         except tkinter.TclError:
             has_redo = False
 
-        # Apply states
         def set_state(label, enabled):
             try:
                 self.entryconfig(label, state=("normal" if enabled else "disabled"))
             except Exception:
                 pass
 
-        states = {"has_selection": has_selection, "has_clip": has_clip, "has_text": has_text, "has_undo": has_undo, "has_redo": has_redo}
+        states = {"has_selection": has_selection, "has_clip": has_clip, "has_text": has_text,
+                  "has_undo": has_undo, "has_redo": has_redo}
         for state, labels in self.labels_states.items():
             for label in labels:
                 set_state(label, states[state])

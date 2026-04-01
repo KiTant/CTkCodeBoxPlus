@@ -3,9 +3,7 @@ from tklinenums import TkLineNumbers
 
 
 class AddLineNums(TkLineNumbers):
-    """
-    Line numbers widget for CTkCodeBox (uses TkLineNumbers)
-    """
+    """Line numbers widget for CTkCodeBox (uses TkLineNumbers)"""
     def __init__(self,
                  master,
                  text_color=None,

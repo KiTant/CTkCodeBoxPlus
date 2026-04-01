@@ -1,6 +1,5 @@
 """
 Keybinding system for customtkinter
-
 Provides layout-independent keyboard keybind registration that works across
 platforms and keyboard layouts by physical keycode logic.
 
@@ -15,7 +14,6 @@ Usage:
     from .keybinding import unregister_keybind
     unregister_keybind(root, "CmdOrCtrl+P")              # remove all callbacks for this keybind on target
     unregister_keybind(entry, "Ctrl+Return", on_submit)  # remove specific callback
-
 Notes:
     - You can pass either a toplevel/root (tk.Tk, tk.Toplevel, CTk, CTkToplevel)
       or ANY Tk/CustomTkinter widget (e.g., CTkTextbox, CTkEntry).
@@ -68,7 +66,6 @@ def _get_platform_keymaps() -> Tuple[Dict[str, int], Dict[str, int]]:
 
 def _build_platform_keymaps() -> Tuple[Dict[str, int], Dict[str, int]]:
     """Return (function_keys, special_keys) dicts for the current platform.
-
     This centralizes platform keycodes to avoid duplication.
     """
     if sys.platform == 'win32':
@@ -90,10 +87,10 @@ def _build_platform_keymaps() -> Tuple[Dict[str, int], Dict[str, int]]:
             'ESCAPE': 27, 'ESC': 27,
             'SPACE': 32,
             'BACKSPACE': 8,
-            'PLUS': 187, 'EQUAL': 187, '=': 187,  # Main keyboard =/+ key
-            'NUMPAD_PLUS': 107, 'NUMPAD_ADD': 107,  # Numpad +
-            'MINUS': 189, 'HYPHEN': 189, '-': 189,  # Main keyboard -/_ key
-            'NUMPAD_MINUS': 109, 'NUMPAD_SUBTRACT': 109,  # Numpad -
+            'PLUS': 187, 'EQUAL': 187, '=': 187,
+            'NUMPAD_PLUS': 107, 'NUMPAD_ADD': 107,
+            'MINUS': 189, 'HYPHEN': 189, '-': 189,
+            'NUMPAD_MINUS': 109, 'NUMPAD_SUBTRACT': 109,
             'COMMA': 188, ',': 188,
             'PERIOD': 190, '.': 190
         }
@@ -106,7 +103,7 @@ def _build_platform_keymaps() -> Tuple[Dict[str, int], Dict[str, int]]:
         }
         special_keys = {
             'DELETE': 117, 'DEL': 117,  # Forward Delete (both unified)
-            'BACKSPACE': 51,  # Backspace key
+            'BACKSPACE': 51,
             'INSERT': 114,
             'HOME': 115, 'END': 119,
             'PAGE_UP': 116, 'PAGEUP': 116, 'PGUP': 116,
@@ -116,10 +113,10 @@ def _build_platform_keymaps() -> Tuple[Dict[str, int], Dict[str, int]]:
             'ENTER': 36, 'RETURN': 76,  # keypad Enter = 76
             'ESCAPE': 53, 'ESC': 53,
             'SPACE': 49,
-            'PLUS': 69, 'EQUAL': 69, '=': 69,  # Main keyboard =/+ key
-            'NUMPAD_PLUS': 78, 'NUMPAD_ADD': 78,  # Numpad +
-            'MINUS': 27, 'HYPHEN': 27, '-': 27,  # Main keyboard -/_ key
-            'NUMPAD_MINUS': 75, 'NUMPAD_SUBTRACT': 75,  # Numpad -
+            'PLUS': 69, 'EQUAL': 69, '=': 69,
+            'NUMPAD_PLUS': 78, 'NUMPAD_ADD': 78,
+            'MINUS': 27, 'HYPHEN': 27, '-': 27,
+            'NUMPAD_MINUS': 75, 'NUMPAD_SUBTRACT': 75,
             'COMMA': 43, ',': 43,
             'PERIOD': 47, '.': 47
         }
@@ -142,10 +139,10 @@ def _build_platform_keymaps() -> Tuple[Dict[str, int], Dict[str, int]]:
             'ESCAPE': 9, 'ESC': 9,
             'SPACE': 65,
             'BACKSPACE': 22,
-            'PLUS': 21, 'EQUAL': 21, '=': 21,  # Main keyboard =/+ key
-            'NUMPAD_PLUS': 86, 'NUMPAD_ADD': 86,  # Numpad +
-            'MINUS': 20, 'HYPHEN': 20, '-': 20,  # Main keyboard -/_ key
-            'NUMPAD_MINUS': 82, 'NUMPAD_SUBTRACT': 82,  # Numpad -
+            'PLUS': 21, 'EQUAL': 21, '=': 21,
+            'NUMPAD_PLUS': 86, 'NUMPAD_ADD': 86,
+            'MINUS': 20, 'HYPHEN': 20, '-': 20,
+            'NUMPAD_MINUS': 82, 'NUMPAD_SUBTRACT': 82,
             'COMMA': 59, ',': 59,
             'PERIOD': 60, '.': 60
         }
@@ -179,7 +176,6 @@ def _get_group_id(widget: Any) -> int:
 
 def _parse_modifiers(mod_tokens: List[str]) -> Tuple[str, List[str]]:
     """Normalize a list of modifier tokens into a canonical key and Tk names.
-
     Returns:
         mods_key: canonical string like 'ctrl', 'ctrl+shift', or 'none'
         tk_mods: list of Tk modifier names like ['Control', 'Shift']
@@ -222,11 +218,9 @@ def _parse_modifiers(mod_tokens: List[str]) -> Tuple[str, List[str]]:
 
 def register_keybind(widget_or_root: Any, keybind: str, callback: Callable, *, bind_scope: str = 'window') -> None:
     """Register a keyboard keybind that works regardless of keyboard layout.
-
     Supported Modifiers: Ctrl, Alt, Shift, Cmd (macOS)
     Supported Keys: A-Z, 0-9, F1-F12, Delete, Insert, Home, End, Page_Up, Page_Down, etc.
     Supports both single keys (F1, F2, Delete) and modified keys (Ctrl+S, Alt+F4)
-
     Args:
         widget_or_root: Any Tk/CustomTkinter widget or a toplevel/root.
         keybind: Keybind string in format 'Modifier+Key' or just 'Key' (e.g., "Ctrl+S", "Alt+F4", "F1")
@@ -402,13 +396,11 @@ def register_keybind(widget_or_root: Any, keybind: str, callback: Callable, *, b
 
 def unregister_keybind(widget_or_root: Any, keybind: str, callback: Callable | None = None, *, bind_scope: str = 'window') -> bool:
     """Unregister keybind from a window or a specific widget.
-
     Args:
         widget_or_root: Any Tk/CustomTkinter widget or a toplevel/root.
         keybind: Keybind string 'Modifier+Key' or just 'Key'. Supports 'CmdOrCtrl'.
         callback: Optional specific callback to remove. If None, removes all callbacks for this keybind.
         bind_scope: 'window' to target the widget's toplevel, or 'widget' to target only the widget.
-
     Returns:
         True if something was removed, False otherwise.
     """

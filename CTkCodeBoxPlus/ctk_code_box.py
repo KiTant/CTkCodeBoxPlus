@@ -22,14 +22,12 @@ import pyperclip
 
 class CTkCodeBox(customtkinter.CTkTextbox):
     """A code-oriented CTk textbox with syntax highlighting and UX helpers.
-
     CTkCodeBox wraps a CTkTextbox to provide:
     - Pygments-based syntax highlighting with theme support
     - Optional line numbers, smarter selection, and current-line highlight
     - Indentation helpers (Tab/Shift+Tab, auto-indent on Return)
     - Simple history (Undo/Redo) with typing cooldown
     - Platform-aware keybindings (Cmd on macOS, Ctrl elsewhere)
-
     Emits:
         <<ContentChanged>> on both the inner textbox and the wrapper whenever
         content changes via the provided APIs.
@@ -156,10 +154,8 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def check_lexer(self):
         """Resolve and set the lexer.
-
         If `language` is a string, pick a lexer from common languages.
         otherwise treat `language` as a Pygments lexer class.
-
         Raises:
             LanguageNotAvailableError: When string language is unknown.
         """
@@ -173,7 +169,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def configure_tags(self):
         """Configure all syntax tags for the current Pygments theme.
-
         Raises:
             ThemeNotAvailableError: If the requested theme is not installed.
         """
@@ -220,7 +215,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def insert(self, index, chars, push_history=True, *tags):
         """Insert text and trigger a non-editing highlight update.
-
         Mirrors tkinter.Text.insert signature to maintain API parity.
         """
         if push_history:
@@ -231,7 +225,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def highlight_code(self, code):
         """Tokenize code with Pygments and apply tags.
-
         Raises:
             LexerError: If the provided lexer fails to tokenize the input.
         """
@@ -958,7 +951,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def _handle_chars_wrap(self, chars: str):
         """Handle wrapping/insertion behavior for paired characters.
-
         If text is selected, wraps it with the given pair. Otherwise inserts a
         paired sequence and places the caret between them.
         """
@@ -1086,7 +1078,6 @@ class CTkCodeBox(customtkinter.CTkTextbox):
 
     def _expand_token_at_index(self, idx):
         """Return token span around index based on simple character classes.
-
         Returns:
             A tuple (start_index, end_index) or (None, None) when no token
             can be expanded at the given index.

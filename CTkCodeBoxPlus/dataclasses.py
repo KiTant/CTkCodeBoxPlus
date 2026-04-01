@@ -4,7 +4,6 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class SearchWindowSettings:
-    enabled: bool = True
     title: str = "Search & Replace"
     width: int = 400
     height: int = 250
@@ -34,7 +33,8 @@ class MenuSettings:
     commands: dict = field(default_factory=lambda: {
         # label: (special type for states or "", callable or attribute of codebox in str, displaying accelerator,
         # additional check (callable with return or attr of codebox in str for cget) or None)
-        # or "separator": additional check (callable with return or attr of codebox in str for cget) or None
+        # or
+        # "separator": additional check (callable with return or attr of codebox in str for cget) or None
         "Copy": ("has_selection", "copy_text", "Ctrl+C", None),
         "Paste": ("has_clip", "paste_text", "Ctrl+V", None),
         "Cut": ("has_selection", "cut_text", "Ctrl+X", None),
@@ -75,7 +75,7 @@ class KeybindingSettings:  # If you want to disable keybind just write ""
     R_open_search_window: str = "CmdOrCtrl+F"
     # Indentation keybinds
     R__on_tab: str = "TAB"
-    # Use Shift-Tab for outdent;
+    # Use Shift-Tab for outdent
     R__on_shift_tab: str = "Shift+TAB"
     R__on_return: str = "RETURN"
     # Quote wrapping on selection
